@@ -1,40 +1,41 @@
 from transformers import GPT2LMHeadModel, GPTNeoForCausalLM, GPT2Tokenizer
+import torch
 
 CONFIG = {
-        'model_name': 'sberbank-ai/mGPT',
+        'model_name': "sberbank-ai/rugpt3medium_based_on_gpt2",
+        'model_cpt': "~/Desktop/projects/tg_notebot/models/kantgpt_medium_20ep.pth",
         'model_cls': GPT2LMHeadModel,
-        # 'model_name': 'EleutherAI/gpt-neo-2.7B',
-        # 'model_cls': GPTNeoForCausalLM,
-        'min_length': 20,
-        'max_length': 300,
-        'num_beams': 1,
-        'num_return_sequences': 1,
-        'no_repeat_ngram_size': 2,
-        'device': 'cuda'}
+        'device': 'cuda',
+        'generate_config' : {'do_sample':True,
+                            'num_beams':3,
+                            'temperature':.9,
+                            'top_p':1.3,
+                            'min_length': 5,
+                            'max_length':100,}
+        }
         
 class Model:
     def __init__(self, config=CONFIG):
-        gpt2_name = config['model_name']
-        self.model = config['model_cls'].from_pretrained(gpt2_name)
+        model_name = config['model_name']
+        self.model = config['model_cls'].from_pretrained(model_name)
         self.model.eval()
-        self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_name)
+
+        cpt = torch.load(config['model_cpt'])
+        self.model.load_state_dict(cpt['model_state_dict'])
+
+        self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
         self.model.to(config['device'])
         self.config = config
 
 
     def generate(self, text):
+        max_input_size = 2048 - self.config['generate_config']['max_length']
         input_ids = self.tokenizer.encode(text, return_tensors='pt').to(self.config['device'])
-        num_tokens = input_ids.shape[1]
-
-        # set return_num_sequences > 1
-        beam_outputs = self.model.generate(
-            input_ids, 
-            min_length=num_tokens + self.config['min_length'],
-            max_length=num_tokens + self.config['max_length'], 
-            num_beams=self.config['num_beams'], 
-            no_repeat_ngram_size=self.config['no_repeat_ngram_size'], 
-            num_return_sequences=self.config['num_return_sequences'], 
-            early_stopping=True
-        )
-
-        return [self.tokenizer.decode(b, skip_special_tokens=True) for b in beam_outputs]
+        if len(input_ids) > max_input_size:
+            input_ids = input_ids[-max_input_size:]
+        
+        with torch.no_grad():
+            out = self.model.generate(input_ids, **self.config['generate_config'])
+        
+        generated_text = list(map(self.tokenizer.decode, out))[0]
+        return generated_text
