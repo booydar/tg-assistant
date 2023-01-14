@@ -1,3 +1,4 @@
 {
-    "token": "<YOUR_TOKEN>"
+    "token": "<YOUR_TG_TOKEN>",
+    "start_message": "<GREETING_MESSAGE>"
 }
