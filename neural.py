@@ -11,7 +11,7 @@ CONFIG = {
         # 'model_name' : 'sberbank-ai/mGPT',
         # 'model_cpt': '/home/booydar/Desktop/projects/tg_notebot/models/kant_mgpt_50ep.pth',
         'model_cls': GPT2LMHeadModel,
-        'device': 'cuda',
+        'device': 'cpu',
         'generate_config' : {'do_sample':True,
                             'num_beams':1,
                             'temperature':.9,
