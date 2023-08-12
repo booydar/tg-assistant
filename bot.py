@@ -8,22 +8,23 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transcribe import transcribe_audio
 
 GEN_CONFIG = {'num_beams':1,
-                'temperature':2.5,
+                'temperature':1.2,
                 'top_p':0.9,
                 'min_length': 5,
-                'max_new_tokens':50,}
+                'max_new_tokens':150,}
 
 class PersonaBot(telebot.TeleBot):
-    def __init__(self, api_token):       
+    def __init__(self, api_token, model_name):       
         super().__init__(api_token)
         self.wait_value = False
         self.prompt = "<|prompter|>{}<|endoftext|><|assistant|>"
         self.context = ''
         self.generate_config = GEN_CONFIG
-        self.init_model()
+        self.init_model(model_name)
         self.lang = 'en-US'
+        self.model_name = model_name
 
-    def init_model(self, model_name="OpenAssistant/falcon-7b-sft-top1-696"):
+    def init_model(self, model_name):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, load_in_8bit=True, device_map='auto', trust_remote_code=True)#, load_in_8bit_fp32_cpu_offload=True)
         self.model.eval()
@@ -96,14 +97,14 @@ class PersonaBot(telebot.TeleBot):
 
     def reset(self):
         self.context = ''
-        self.init_model()
+        self.init_model(self.model_name)
 
     def get_context(self):
         return f"Context: \n{self.context}"
 
 with open('/home/booydar/Desktop/projects/tg_notebot/assistant_bot/config.json', 'r') as f:
     config = json.load(f)
-bot = PersonaBot(config['tg_api_token'])
+bot = PersonaBot(config['tg_api_token'], model_name=config['model_name'])
 
 
 def continue_markup():
