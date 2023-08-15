@@ -33,53 +33,47 @@ class PersonaBot(telebot.TeleBot):
         self.model.eval()
 
     def answer_message(self, message):
-        context = self.context
-        if not context.endswith('<</SYS>>\n\n') and not context.endswith('</s>'):
-            context += '</s>'
+        try:
+            context = self.context
+            if not context.endswith('<</SYS>>\n\n') and not context.endswith('</s>'):
+                context += '</s>'
 
-        context = f"{context} {message} [/INST]"
+            context = f"{context} {message} [/INST]"
 
-        input_ids = self.tokenizer.encode(context, return_tensors='pt').cuda()
+            input_ids = self.tokenizer.encode(context, return_tensors='pt').cuda()
 
-        with torch.no_grad():
-            out = self.model.generate(input_ids, **self.generate_config)
-        
-        context = self.tokenizer.decode(out[0])
-        self.context = f"{context} "
-        print(self.context)
+            with torch.no_grad():
+                out = self.model.generate(input_ids, **self.generate_config)
+            
+            context = self.tokenizer.decode(out[0])
+            self.context = f"{context} "
 
-        new_tokens = out[0][input_ids.shape[1]:]
-        generated_text = self.tokenizer.decode(new_tokens, add_special_tokens=False)
+            new_tokens = out[0][input_ids.shape[1]:]
+            generated_text = self.tokenizer.decode(new_tokens, add_special_tokens=False)
 
-        return generated_text
+            return generated_text
+        except Exception as e:
+            return f'Exception:\n{e}'
 
     def continue_message(self):
-        context = self.context
-        if context.endswith('</s>'):
-            context = context[:-4]
+        try:
+            context = self.context
+            if context.endswith('</s>'):
+                context = context[:-4]
 
-        input_ids = self.tokenizer.encode(context, return_tensors='pt').cuda()
+            input_ids = self.tokenizer.encode(context, return_tensors='pt').cuda()
 
-        with torch.no_grad():
-            out = self.model.generate(input_ids, **self.generate_config)
-        
-        self.context = self.tokenizer.decode(out[0])
+            with torch.no_grad():
+                out = self.model.generate(input_ids, **self.generate_config)
+            
+            self.context = self.tokenizer.decode(out[0])
 
-        new_tokens = out[0][input_ids.shape[1]:]
-        generated_text = self.tokenizer.decode(new_tokens, add_special_tokens=False)
-        
-        return generated_text
-
-        # with torch.no_grad():
-        #     out = self.model.generate(input_ids, **self.generate_config)
-
-        # generated_text = list(map(self.tokenizer.decode, out))[0]
-        # answer = generated_text[generated_text.index('<|assistant|>') + len('<|assistant|>'):]
-        # if '<|endoftext|>' in answer:
-        #     answer = answer[:answer.index('<|endoftext|>')]
-
-        # updated_context = context + answer
-        # return answer, updated_context
+            new_tokens = out[0][input_ids.shape[1]:]
+            generated_text = self.tokenizer.decode(new_tokens, add_special_tokens=False)
+            
+            return generated_text
+        except Exception as e:
+            return f'Exception:\n{e}'
 
     def transcribe_message(self, message):
         self.tags = []
