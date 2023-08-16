@@ -7,7 +7,8 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transcribe import transcribe_audio
 
-GEN_CONFIG = {'num_beams':1,
+GEN_CONFIG = {'do_sample': True,
+                'num_beams':1,
                 'temperature':1.2,
                 'top_p':0.9,
                 'min_length': 5,
@@ -40,7 +41,7 @@ class PersonaBot(telebot.TeleBot):
         input_ids = self.tokenizer.encode(model_input, return_tensors='pt').cuda()
 
         with torch.no_grad():
-            out = self.model.generate(input_ids, do_sample=True, **self.generate_config)
+            out = self.model.generate(input_ids, **self.generate_config)
 
         generated_text = list(map(self.tokenizer.decode, out))[0]
         self.last_generation = generated_text
