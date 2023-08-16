@@ -1,0 +1,4 @@
+{
+    "tg_api_token": "[TG_API_TOKEN]",
+    "model_name": "OpenAssistant/falcon-7b-sft-top1-696"
+}
