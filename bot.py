@@ -142,8 +142,11 @@ def handle_voice(message):
     transcription = bot.transcribe_message(message)
     bot.transctiption = transcription
     bot.send_message(message.chat.id, f'"{transcription}"')
-    answer, bot.context = bot.answer_message(transcription, bot.context)
-    bot.send_message(message.chat.id, answer, reply_markup=continue_markup())
+    try:
+        answer, bot.context = bot.answer_message(transcription, bot.context)
+        bot.send_message(message.chat.id, answer, reply_markup=continue_markup())
+    except Exception as e:
+        bot.send_message(message.chat.id, f'Exception:\n{e}')
 
 
 @bot.message_handler(content_types=['text'])
@@ -167,9 +170,12 @@ def handle_text(message):
     elif message.text.startswith('/config'):
         msg = '; '.join([f'{k}-{v}' for k, v in bot.generate_config.items()])
         bot.send_message(message.chat.id, msg)
-    else:
-        answer, bot.context = bot.answer_message(message.text, bot.context)
-        bot.send_message(message.chat.id, answer, reply_markup=continue_markup())
+    else:        
+        try:
+            answer, bot.context = bot.answer_message(message.text, bot.context)
+            bot.send_message(message.chat.id, answer, reply_markup=continue_markup())
+        except Exception as e:
+            bot.send_message(message.chat.id, f'Exception:\n{e}')
     
 
 bot.infinity_polling()
