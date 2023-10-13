@@ -10,19 +10,21 @@ from transformers import AutoTokenizer
 from transcribe import transcribe_audio, Punctuator
 
 # torch.cuda.set_per_process_memory_fraction(0.9, "cuda:0")
+MAX_CONTEXT_TOKENS = 800
 
 GEN_CONFIG = {'do_sample': True,
                 'num_beams':1,
                 'temperature':0.7,
                 'top_p':0.95,
                 'repetition_penalty':1.15,
-                'max_new_tokens':512,}
+                'max_new_tokens':256,}
 
 class PersonaBot(telebot.TeleBot):
     def __init__(self, api_token, model_name):       
         super().__init__(api_token)
         self.wait_value = False
-        self.prompt = "<|prompter|>{}<|endoftext|><|assistant|>"
+        self.l_prompt_text = "<|system|>You are a helpful assistant. Continue the dialogue with user.</s><|prompter|>"
+        self.r_prompt_text = "</s><|assistant|>"
         self.context = ''
         self.generate_config = GEN_CONFIG
         self.init_model(model_name)
@@ -42,38 +44,21 @@ class PersonaBot(telebot.TeleBot):
                     use_triton=False,
                     quantize_config=None)
         self.model.eval()
+        self.left_prompt = self.tokenizer.encode(self.l_prompt_text, return_tensors='pt', add_special_tokens=False)
+        self.right_prompt = self.tokenizer.encode(self.r_prompt_text, return_tensors='pt', add_special_tokens=False)
 
-    def answer_message(self, message, context):
-        if not context:
-            model_input = self.prompt.format(message)
-            updated_context = f"User:{message}"
-        else:
-            updated_context = f"{context}\nUser:{message}"
-            model_input = self.prompt.format(updated_context)
+    def answer_message(self, message=None, context=''):
+        full_context = context
+        if message is not None:
+            full_context += f"\nUser: {message}"
+        # print(full_context, message, context)
 
-        input_ids = self.tokenizer.encode(model_input, return_tensors='pt').cuda()
-
-        with torch.no_grad():
-            out = self.model.generate(inputs=input_ids, **self.generate_config).cpu()
-        gc.collect()
-        torch.cuda.empty_cache()
-
-        generated_text = self.tokenizer.decode(out[0], add_special_tokens=False)
-        if generated_text[-4:] == '</s>':
-            generated_text = generated_text[:-4]
-        self.last_generation = generated_text
-        answer = generated_text[generated_text.index('<|assistant|>') + len('<|assistant|>'):]
-        if '<|endoftext|>' in answer:
-            answer = answer[:answer.index('<|endoftext|>')]
-
-        updated_context += f"\nAssistant:{answer}"
-        return answer, updated_context
-
-    def continue_message(self, context):
-        model_input = self.last_generation
-        if model_input[-13:] == '<|endoftext|>':
-            model_input = model_input[-13:]
-        input_ids = self.tokenizer.encode(model_input, return_tensors='pt').cuda()
+        input_ids = self.tokenizer.encode(full_context, return_tensors='pt', add_special_tokens=False)
+        
+        if input_ids.shape[1] > MAX_CONTEXT_TOKENS:
+            print(f'Input length exceeded {MAX_CONTEXT_TOKENS} tokens. Truncating.')
+        input_ids = input_ids[:, -MAX_CONTEXT_TOKENS:]
+        input_ids = torch.cat([self.left_prompt, input_ids, self.right_prompt], dim=1).cuda()
 
         with torch.no_grad():
             out = self.model.generate(inputs=input_ids, **self.generate_config).cpu()
@@ -83,15 +68,10 @@ class PersonaBot(telebot.TeleBot):
         generated_text = self.tokenizer.decode(out[0], add_special_tokens=False)
         if generated_text[-4:] == '</s>':
             generated_text = generated_text[:-4]
-        self.last_generation = generated_text
         answer = generated_text[generated_text.index('<|assistant|>') + len('<|assistant|>'):]
-        if '<|endoftext|>' in answer:
-            answer = answer[:answer.index('<|endoftext|>')]
 
-        start_pos = generated_text.index('<|prompter|>') + len('<|prompter|>')
-        end_pos = generated_text.index('<|endoftext|>')
-        updated_context = generated_text[start_pos:end_pos] + answer
-        return answer, updated_context
+        full_context += f"\nAssistant: {answer}"
+        return answer, full_context
 
     def transcribe_message(self, message):
         self.tags = []
@@ -107,8 +87,8 @@ class PersonaBot(telebot.TeleBot):
 
     def reset(self):
         self.context = ''
+        gc.collect()
         torch.cuda.empty_cache()
-        self.init_model(self.model_name)
 
     def get_context(self):
         return f"Context: \n{self.context}"
@@ -127,7 +107,7 @@ def continue_markup():
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     if call.data == "continue":
-        generated, bot.context = bot.continue_message(bot.context)
+        generated, bot.context = bot.answer_message(context=bot.context)
         bot.send_message(bot.chat_id, generated, reply_markup=continue_markup())
 
 @bot.message_handler(commands=['start'])
@@ -143,7 +123,7 @@ def handle_voice(message):
     bot.transctiption = transcription
     bot.send_message(message.chat.id, f'"{transcription}"')
     try:
-        answer, bot.context = bot.answer_message(transcription, bot.context)
+        answer, bot.context = bot.answer_message(message=transcription, context=bot.context)
         bot.send_message(message.chat.id, answer, reply_markup=continue_markup())
     except Exception as e:
         bot.send_message(message.chat.id, f'Exception:\n{e}')
@@ -172,7 +152,7 @@ def handle_text(message):
         bot.send_message(message.chat.id, msg)
     else:        
         try:
-            answer, bot.context = bot.answer_message(message.text, bot.context)
+            answer, bot.context = bot.answer_message(message=message.text, context=bot.context)
             bot.send_message(message.chat.id, answer, reply_markup=continue_markup())
         except Exception as e:
             bot.send_message(message.chat.id, f'Exception:\n{e}')
